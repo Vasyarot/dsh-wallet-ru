@@ -102,11 +102,26 @@
 
 ## Установка
 
+**Из GitHub — обычный web-профиль:**
+
+```powershell
+dsh plugin --profile web add github:Vasyarot/dsh-wallet-ru
+```
+
+CLI сам добавит пакет в зависимости профиля и в `dsh.profile.bundles`. После установки
+перезапустите DSH. Откат: `dsh plugin --profile web remove dsh-plugin-wallet-ru`.
+
+**Desktop-профиль** командная строка не обслуживает — Electron-приложение управляет им
+само и отвечает `profile "desktop" is managed exclusively by the Electron application`.
+Ставьте через **Настройки → Плагины** (или через менеджер плагинов вашей сборки).
+
+**Локальная разработка** — когда правите код прямо в этой папке:
+
 ```powershell
 pnpm add "dsh-plugin-wallet-ru@link:D:\Project\DeepSeek Harness\plugins\dsh-wallet-ru"
 ```
 
-и добавить `dsh-plugin-wallet-ru` в `dsh.profile.bundles` профиля.
+и добавьте `dsh-plugin-wallet-ru` в `dsh.profile.bundles` профиля.
 
 ## Файлы
 
