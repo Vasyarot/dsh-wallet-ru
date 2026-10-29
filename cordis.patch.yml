@@ -1,0 +1,4 @@
+# Патч профиля: одна строка, сам плагин подключается как бандл.
+- insert:
+    - id: wallet-ru
+      name: 'dsh-plugin-wallet-ru'
