@@ -490,6 +490,25 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Достроить окно до семи дней: хост может прислать только дни с тратами
+     * (старые версии), а графику нужна непрерывная ось.
+     * @param {Array<{date: string}>} days - дни с хоста.
+     * @param {number} [size] - длина окна.
+     * @returns {Array<object>}
+     */
+    function weekWindow(days, size = USAGE_DAYS) {
+      const byDate = new Map(days.map((day) => [day.date, day]))
+      const today = new Date()
+      const window = []
+      for (let offset = size - 1; offset >= 0; offset -= 1) {
+        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        window.push(byDate.get(key) ?? { date: key, requests: 0, tokens: 0, cost: 0 })
+      }
+      return window
+    }
+
+    /**
      * Геометрия столбцов: высота пропорциональна стоимости дня, ноль — тонкая
      * полоска-заглушка, чтобы день не исчезал с оси.
      * @param {Array<{date: string, cost?: number}>} days - дни окна.
@@ -538,7 +557,7 @@ window.__ModuleLoader__.load({
             })
             const body = await response.json()
             if (!alive) return
-            if (body && body.ok) setState({ phase: 'ready', days: body.days ?? [], reason: null })
+            if (body && body.ok) setState({ phase: 'ready', days: weekWindow(body.days ?? []), reason: null })
             else setState({ phase: 'error', days: [], reason: (body && body.reason) || 'нет данных' })
           } catch (error) {
             if (!alive) return
@@ -1088,7 +1107,7 @@ window.__ModuleLoader__.load({
     exports.apply = apply
     exports.inject = inject
     // Локальные проверки (tools/smoke.mjs): оболочка эти поля не читает.
-    exports.__internals = { priceTooltip, balanceTooltip, weekday, dayText, chartBars, BalanceChip }
+    exports.__internals = { priceTooltip, balanceTooltip, weekday, dayText, chartBars, weekWindow, BalanceChip }
     return module.exports
   },
 })

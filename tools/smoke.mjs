@@ -57,7 +57,7 @@ const client = captured.factory((name) => {
 assert.equal(typeof client.apply, 'function')
 assert.deepEqual(client.inject, ['slots'])
 
-const { priceTooltip, balanceTooltip, weekday, dayText, chartBars } = client.__internals
+const { priceTooltip, balanceTooltip, weekday, dayText, chartBars, weekWindow } = client.__internals
 assert.equal(typeof priceTooltip, 'function')
 assert.equal(typeof balanceTooltip, 'function')
 
@@ -113,6 +113,25 @@ assert.equal(bars[0].height, 3)
 assert.equal(bars[3].height, 3)
 assert.equal(weekday('2026-10-29'), 'чт')
 assert.match(dayText(days[5]), /^29\.10 · \$5\.00 · 2,0 млн токенов · 20 запросов$/)
+
+// --- Старый хост присылает только дни с тратами: окно достраивается до семи.
+const now = new Date()
+const key = (offset) => {
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+const sparse = [
+  { date: key(3), cost: 1.5, tokens: 100, requests: 2 },
+  { date: key(0), cost: 0.5, tokens: 50, requests: 1 },
+]
+const window = weekWindow(sparse)
+assert.equal(window.length, 7)
+assert.deepEqual(window.map((day) => day.date), [...window.map((day) => day.date)].sort())
+assert.equal(window.at(-1).date, key(0))
+assert.equal(window.at(-4).date, key(3))
+assert.equal(window.at(-4).cost, 1.5)
+assert.equal(window.filter((day) => day.requests === 0).length, 5)
+assert.deepEqual(weekWindow([]).map((day) => day.requests), [0, 0, 0, 0, 0, 0, 0])
 
 // --- Разметка чипа: у сеанса нет title, у тарифа и баланса — есть.
 if (found !== null) {
