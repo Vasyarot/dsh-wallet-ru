@@ -1,10 +1,14 @@
 {
   "name": "dsh-plugin-wallet-ru",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
-  "description": "Баланс DeepSeek (доллары, юани, бонусные баллы), тариф Пик / Не пик и встроенное окно пополнения в доке композера — русский интерфейс",
+  "description": "Баланс DeepSeek (доллары, юани, бонусные баллы), тариф Пик / Не пик, траты за 7 дней графиком и встроенное окно пополнения в доке композера — русский интерфейс",
   "license": "MIT",
+  "engines": {
+    "node": ">=24",
+    "dsh": ">=0.2.1-rc.5"
+  },
   "main": "index.js",
   "exports": {
     ".": "./index.js",
@@ -20,6 +24,7 @@
     "LICENSE"
   ],
   "dsh": {
+    "manifestVersion": 1,
     "bundle": {
       "patch": "./cordis.patch.yml"
     },

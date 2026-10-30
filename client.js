@@ -1,8 +1,10 @@
 /**
- * Клиентская половина: «Не пик 12 ч 38 мин · Баланс: $0.86 · Сессия: 12,3 тыс. ток · $0.04».
+ * Клиентская половина: «Не пик 12 ч 38 мин · Баланс: $0.86 · ¥12.50 · Сессия: 12,3 тыс. ток · $0.04».
  *
- * Клик по сумме баланса открывает страницу пополнения, клик по расходу за сеанс —
- * маленькое окно с тратами за последнюю неделю.
+ * Подсказки разнесены по элементам чипа:
+ *  - наведение на «Пик / Не пик» — цены: сначала активный тариф, ниже второй;
+ *  - наведение на сумму баланса — текущий баланс в долларах, юанях и бонусные баллы;
+ *  - у сеанса подсказки нет; клик открывает окно трат за неделю с графиком.
  *
  * Требует только react. Типографика повторяет штатные плашки статистики под
  * композером («Попадание в кэш», «ток/с»): те же переменные темы и размер шрифта.
@@ -32,6 +34,8 @@ window.__ModuleLoader__.load({
     const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
     /** Окно недельной статистики. */
     const USAGE_DAYS = 7
+    /** Ширина окна статистики. */
+    const PANEL_WIDTH = 300
 
     /** Цены DeepSeek в долларах за миллион токенов вне пика. */
     const OFFPEAK_USD = { input: 0.14, cacheHit: 0.014, output: 0.21 }
@@ -41,6 +45,10 @@ window.__ModuleLoader__.load({
     /** Не пик — зелёный, пик — красный. */
     const GREEN = '#22c55e'
     const RED = '#ef4444'
+    const BAR = '#3b82f6'
+
+    /** Короткие дни недели для оси графика. */
+    const WEEKDAYS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
 
     // Типографика штатных плашек композера (StatsPills.module.css).
     const ANCHOR_STYLE = {
@@ -70,6 +78,7 @@ window.__ModuleLoader__.load({
       color: 'var(--dsw-alias-separator-primary)',
       margin: '0 6px',
     }
+    const HINT_STYLE = { cursor: 'help' }
     // Окно платформы: тот же материал и та же геометрия, что у штатного
     // встроенного просмотра (PlatformOverlay.module.css в ui-settings-account):
     // полоса 48 px сверху и область просмотра под ней. На Windows всё окно
@@ -244,6 +253,17 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Цена за миллион токенов: `$0.14`, `$0.014`, `$0.028`.
+     * @param {number} value - цена.
+     * @returns {string}
+     */
+    function price(value) {
+      const number = Number(value)
+      if (!Number.isFinite(number)) return '$—'
+      return `$${number < 0.1 ? number.toFixed(3) : number.toFixed(2)}`
+    }
+
+    /**
      * Сумма в валюте кошелька: доллар — `$`, юань — `¥`, прочее — код после числа.
      * @param {string} currency - код валюты платформы.
      * @param {string|number} value - остаток.
@@ -308,6 +328,20 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Цены за миллион токенов по тарифу.
+     * @param {'peak'|'offpeak'} tier - тариф.
+     * @returns {{input: number, cacheHit: number, output: number}}
+     */
+    function pricesFor(tier) {
+      const multiplier = tier === 'peak' ? PEAK_MULTIPLIER : 1
+      return {
+        input: OFFPEAK_USD.input * multiplier,
+        cacheHit: OFFPEAK_USD.cacheHit * multiplier,
+        output: OFFPEAK_USD.output * multiplier,
+      }
+    }
+
+    /**
      * Расход текущего сеанса по проекции tokenUsage.
      * @param {object|undefined} usage - проекция.
      * @param {'peak'|'offpeak'} tier - тариф.
@@ -328,6 +362,45 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Подсказка тарифа: сначала действующий, ниже второй. Только цены.
+     * @param {'peak'|'offpeak'} tier - действующий тариф.
+     * @param {{input: number, cacheHit: number, output: number}|null} current - цены с хоста.
+     * @returns {string}
+     */
+    function priceTooltip(tier, current) {
+      const active = current ?? pricesFor(tier)
+      const other = pricesFor(tier === 'peak' ? 'offpeak' : 'peak')
+      const line = (label, prices) =>
+        `${label}\nввод ${price(prices.input)} · кэш ${price(prices.cacheHit)} · вывод ${price(prices.output)} за 1M токенов`
+      return tier === 'peak'
+        ? `${line('Пик (сейчас)', active)}\n\n${line('Не пик', other)}`
+        : `${line('Не пик (сейчас)', active)}\n\n${line('Пик', other)}`
+    }
+
+    /**
+     * Подсказка баланса: доллары, юани, бонусные баллы.
+     * @param {object} remote - состояние баланса с хоста.
+     * @returns {string}
+     */
+    function balanceTooltip(remote) {
+      if (!remote.balance) {
+        return remote.phase === 'loading' ? 'Баланс: загрузка…' : `Баланс недоступен${remote.reason ? `: ${remote.reason}` : ''}`
+      }
+      const balance = remote.balance
+      const usd = balance.usd !== null && balance.usd !== undefined ? dollars(Number(balance.usd)) : '$—'
+      const wallets = Array.isArray(balance.other) ? balance.other : []
+      const cny = wallets.find((wallet) => String(wallet?.currency).toUpperCase() === 'CNY')
+      const bonusWallets = Array.isArray(balance.bonus) ? balance.bonus : []
+      const bonusTotal = bonusWallets.reduce((sum, wallet) => sum + (Number(wallet?.balance) || 0), 0)
+      const bonusCurrency = String(bonusWallets[0]?.currency ?? 'USD')
+      return [
+        `Текущий баланс: ${usd}`,
+        `В юанях: ${cny ? currencyText('CNY', cny.balance) : 'нет'}`,
+        `Бонусные баллы: ${bonusTotal > 0 ? currencyText(bonusCurrency, bonusTotal) : '0'}`,
+      ].join('\n')
+    }
+
+    /**
      * Состояние баланса с хоста: запрос раз в минуту плюс тик для отсчёта.
      * @returns {object}
      */
@@ -335,6 +408,7 @@ window.__ModuleLoader__.load({
       const [remote, setRemote] = React.useState({
         phase: 'loading',
         balance: null,
+        perMillion: null,
         source: null,
         reason: null,
         topUpUrl: 'https://platform.deepseek.com/top_up',
@@ -356,6 +430,7 @@ window.__ModuleLoader__.load({
             setRemote({
               phase: 'ready',
               balance: data.balance || null,
+              perMillion: data.perMillion || null,
               source: data.source || null,
               reason: data.reason || null,
               topUpUrl: data.topUpUrl || 'https://platform.deepseek.com/top_up',
@@ -365,6 +440,7 @@ window.__ModuleLoader__.load({
             setRemote({
               phase: 'error',
               balance: null,
+              perMillion: null,
               source: null,
               reason: error instanceof Error ? error.message : String(error),
               topUpUrl: 'https://platform.deepseek.com/top_up',
@@ -386,19 +462,67 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Маленькое окно с тратами за неделю.
+     * День недели по дате YYYY-MM-DD (полдень, чтобы не зависеть от перехода часов).
+     * @param {string} date - локальная дата.
+     * @returns {string}
+     */
+    function weekday(date) {
+      const at = new Date(`${date}T12:00:00`)
+      return Number.isNaN(at.getTime()) ? '' : WEEKDAYS[at.getDay()]
+    }
+
+    /**
+     * Дата в виде «29.10».
+     * @param {string} date - локальная дата.
+     * @returns {string}
+     */
+    function dayLabel(date) {
+      return `${date.slice(8, 10)}.${date.slice(5, 7)}`
+    }
+
+    /**
+     * Подпись одного дня для нативного title и строки деталей.
+     * @param {object} day - день из /wallet-ru/usage.
+     * @returns {string}
+     */
+    function dayText(day) {
+      return `${dayLabel(day.date)} · ${dollars(day.cost ?? 0)} · ${tokenText(day.tokens ?? 0)} токенов · ${day.requests ?? 0} запросов`
+    }
+
+    /**
+     * Геометрия столбцов: высота пропорциональна стоимости дня, ноль — тонкая
+     * полоска-заглушка, чтобы день не исчезал с оси.
+     * @param {Array<{date: string, cost?: number}>} days - дни окна.
+     * @returns {Array<{date: string, weekday: string, height: number}>}
+     */
+    function chartBars(days) {
+      const maxCost = days.reduce((max, day) => Math.max(max, day.cost ?? 0), 0)
+      return days.map((day) => {
+        const cost = day.cost ?? 0
+        const ratio = maxCost > 0 ? Math.min(1, cost / maxCost) : 0
+        return {
+          date: day.date,
+          weekday: weekday(day.date),
+          height: cost > 0 ? Math.round(10 + ratio * 72) : 3,
+        }
+      })
+    }
+
+    /**
+     * Маленькое окно с тратами за неделю: столбцы по дням и итог.
      * @param {object} props - якорь и обработчик закрытия.
      */
     function UsagePopover({ anchor, onClose }) {
       const panelRef = React.useRef(null)
       const [state, setState] = React.useState({ phase: 'loading', days: [], reason: null })
       const [position, setPosition] = React.useState(null)
+      const [hovered, setHovered] = React.useState(null)
 
       React.useEffect(() => {
         if (anchor !== null && anchor !== undefined) {
           const rect = anchor.getBoundingClientRect()
           setPosition({
-            left: Math.max(8, Math.min(rect.left, window.innerWidth - 268)),
+            left: Math.max(8, Math.min(rect.left, window.innerWidth - PANEL_WIDTH - 12)),
             bottom: window.innerHeight - rect.top + 8,
           })
         }
@@ -443,21 +567,92 @@ window.__ModuleLoader__.load({
         }
       }, [onClose])
 
-      const total = state.days.reduce((sum, day) => sum + (day.cost ?? 0), 0)
-      const rows =
-        state.days.length === 0
-          ? [h('div', { key: 'empty', style: { opacity: 0.6 } }, state.phase === 'loading' ? 'Загрузка…' : 'Нет данных')]
-          : state.days.map((day) =>
-              h(
-                'div',
-                {
-                  key: day.date,
-                  style: { display: 'flex', gap: '12px', padding: '2px 0' },
+      const days = state.days
+      const total = days.reduce((sum, day) => sum + (day.cost ?? 0), 0)
+      const totalTokens = days.reduce((sum, day) => sum + (day.tokens ?? 0), 0)
+      const totalRequests = days.reduce((sum, day) => sum + (day.requests ?? 0), 0)
+      const active = hovered !== null ? days[hovered] : undefined
+
+      const detail =
+        state.phase !== 'ready'
+          ? state.phase === 'loading'
+            ? 'Загрузка…'
+            : state.reason
+          : active
+            ? dayText(active)
+            : `${tokenText(totalTokens)} токенов · ${totalRequests} запросов`
+
+      const bars =
+        state.phase !== 'ready'
+          ? null
+          : h(
+              'div',
+              {
+                role: 'img',
+                'aria-label': `Стоимость по дням за ${USAGE_DAYS} дней`,
+                title: 'Высота столбца — стоимость дня. Наведите на столбец.',
+                style: {
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  gap: '6px',
+                  height: '86px',
+                  marginTop: '2px',
                 },
-                h('span', null, `${day.date.slice(8, 10)}.${day.date.slice(5, 7)}`),
-                h('span', { style: { opacity: 0.65, marginLeft: 'auto' } }, tokenText(day.tokens)),
-                h('span', { style: { minWidth: '56px', textAlign: 'right' } }, dollars(day.cost)),
-              ),
+              },
+              chartBars(days).map((bar, index) => {
+                const day = days[index]
+                const isActive = hovered === index
+                return h(
+                  'div',
+                  {
+                    key: day.date,
+                    onMouseEnter: () => setHovered(index),
+                    onMouseLeave: () => setHovered((value) => (value === index ? null : value)),
+                    title: dayText(day),
+                    style: {
+                      flex: '1 1 0',
+                      minWidth: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'stretch',
+                      gap: '4px',
+                    },
+                  },
+                  h(
+                    'div',
+                    { style: { height: '74px', display: 'flex', alignItems: 'flex-end' } },
+                    h('div', {
+                      style: {
+                        width: '100%',
+                        height: `${bar.height}px`,
+                        borderRadius: '4px 4px 2px 2px',
+                        background: isActive
+                          ? `linear-gradient(180deg, #93c5fd, ${BAR})`
+                          : day.cost > 0
+                            ? `linear-gradient(180deg, #60a5fa, ${BAR})`
+                            : 'var(--dsw-alias-border-l2, #9ca3af)',
+                        opacity: day.cost > 0 ? 1 : 0.5,
+                        transition: 'background 120ms ease',
+                      },
+                    }),
+                  ),
+                  h(
+                    'div',
+                    {
+                      style: {
+                        fontSize: '10px',
+                        lineHeight: '12px',
+                        textAlign: 'center',
+                        whiteSpace: 'nowrap',
+                        color: isActive
+                          ? 'var(--dsw-alias-label-primary, CanvasText)'
+                          : 'var(--dsw-alias-label-tertiary, GrayText)',
+                      },
+                    },
+                    bar.weekday,
+                  ),
+                )
+              }),
             )
 
       return h(
@@ -465,78 +660,65 @@ window.__ModuleLoader__.load({
         {
           ref: panelRef,
           role: 'dialog',
+          'aria-label': `Траты за ${USAGE_DAYS} дней`,
           style: {
             position: 'fixed',
             left: `${position === null ? 8 : position.left}px`,
             bottom: `${position === null ? 40 : position.bottom}px`,
             zIndex: 2147483000,
-            minWidth: '240px',
-            maxHeight: '320px',
-            overflow: 'auto',
-            padding: '10px 12px',
+            width: `${PANEL_WIDTH}px`,
+            boxSizing: 'border-box',
+            padding: '10px 12px 8px',
             borderRadius: '10px',
             background: 'var(--dsw-alias-bg-elevated, Canvas)',
             color: 'var(--dsw-alias-label-primary, CanvasText)',
             border: '1px solid var(--dsw-alias-separator-primary, GrayText)',
             boxShadow: '0 8px 24px rgba(0, 0, 0, 0.28)',
             fontSize: '12px',
-            lineHeight: '18px',
+            lineHeight: '16px',
             fontVariantNumeric: 'tabular-nums',
           },
         },
-        h('div', { style: { fontWeight: 600, marginBottom: '4px' } }, `Траты за ${USAGE_DAYS} дней`),
-        state.phase === 'error' ? h('div', { style: { opacity: 0.6 } }, state.reason) : rows,
+        h(
+          'div',
+          { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '2px' } },
+          h('span', { style: { fontWeight: 600 } }, `Траты за ${USAGE_DAYS} дней`),
+          h('span', { style: { marginLeft: 'auto', fontWeight: 600, color: state.phase === 'error' ? 'inherit' : '#3b82f6' } }, state.phase === 'error' ? '' : dollars(total)),
+        ),
         h(
           'div',
           {
             style: {
-              display: 'flex',
-              gap: '12px',
+              minHeight: '16px',
+              fontSize: '11px',
+              color: 'var(--dsw-alias-label-tertiary, GrayText)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            },
+          },
+          detail,
+        ),
+        bars,
+        state.phase === 'error' ? h('div', { style: { padding: '6px 0', opacity: 0.7 } }, 'Нет данных о тратах') : null,
+        h(
+          'div',
+          {
+            style: {
               marginTop: '6px',
               paddingTop: '6px',
               borderTop: '1px solid var(--dsw-alias-separator-primary, GrayText)',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: '8px',
+              color: 'var(--dsw-alias-label-tertiary, GrayText)',
+              fontSize: '11px',
             },
           },
-          h('span', null, 'Итого'),
-          h('span', { style: { marginLeft: 'auto', minWidth: '56px', textAlign: 'right', fontWeight: 600 } }, dollars(total)),
+          h('span', null, `Итого ${dollars(total)}`),
+          h('span', { style: { marginLeft: 'auto' } }, tokenText(totalTokens)),
         ),
       )
-    }
-
-    /**
-     * Подсказка: период, цены и источник суммы.
-     * @param {'peak'|'offpeak'} tier - тариф.
-     * @param {object} remote - состояние с хоста.
-     * @param {number} cost - стоимость сеанса.
-     * @returns {string}
-     */
-    function tooltip(tier, remote, cost) {
-      const lines = [
-        tier === 'peak' ? 'Пик: полная цена' : 'Не пик: половина цены',
-        'Ввод $0.14/M · кэш $0.014/M · вывод $0.21/M вне пика',
-        `Сеанс: ${dollars(cost)}`,
-      ]
-      if (remote.balance) {
-        if (remote.balance.usd !== null && remote.balance.usd !== undefined) {
-          lines.push(`Баланс: ${dollars(Number(remote.balance.usd))}`)
-        }
-        for (const wallet of Array.isArray(remote.balance.other) ? remote.balance.other : []) {
-          lines.push(`Кошелёк ${wallet.currency}: ${currencyText(String(wallet.currency), wallet.balance)}`)
-        }
-        for (const wallet of Array.isArray(remote.balance.bonus) ? remote.balance.bonus : []) {
-          lines.push(`Бонусные баллы ${wallet.currency}: ${currencyText(String(wallet.currency), wallet.balance)}`)
-        }
-      }
-      if (remote.source === 'account') lines.push('Источник: вход в аккаунт')
-      else if (remote.source === 'api-key') lines.push('Источник: ключ API')
-      else if (remote.reason) lines.push(`Баланс недоступен: ${remote.reason}`)
-      const platform = typeof window === 'undefined' ? undefined : window.dshPlatform
-      lines.push(
-        platform !== undefined && platform !== null && typeof platform.open === 'function'
-          ? 'Пополнение: окно платформы внутри приложения'
-          : 'Пополнение: только внешний браузер',
-      )
-      return lines.join('\n')
     }
 
     /**
@@ -764,7 +946,10 @@ window.__ModuleLoader__.load({
       return h(TopUpWindow, { onClose: () => pageStore.close() })
     }
 
-    /** Сам чип. */
+    /**
+     * Чип: тариф, баланс и расход сеанса. У каждого смыслового блока своя
+     * подсказка, поэтому длинного общего title больше нет.
+     */
     function BalanceChip(props) {
       const remote = useBalance()
       const usage = typeof props.useProjection === 'function' ? props.useProjection('tokenUsage') : undefined
@@ -777,6 +962,7 @@ window.__ModuleLoader__.load({
       const remaining = humanize(msUntilTierChange(now))
       const peak = tier === 'peak'
       const { total: cost, tokens: sessionTokens } = sessionCost(usage, tier)
+      const hasSession = typeof props.useProjection === 'function'
       // Доллары всегда первыми; юани и бонусные баллы — только если они есть.
       const walletParts = []
       if (remote.balance && remote.balance.usd !== null && remote.balance.usd !== undefined) {
@@ -812,42 +998,52 @@ window.__ModuleLoader__.load({
         { style: ANCHOR_STYLE, 'data-composer-stat': 'balance' },
         h(
           'span',
-          { style: PILL_STYLE, title: tooltip(tier, remote, cost) },
-          h('span', { style: { color: peak ? RED : GREEN } }, peak ? 'Пик' : 'Не пик'),
+          { style: PILL_STYLE },
+          h(
+            'span',
+            { style: { color: peak ? RED : GREEN, ...HINT_STYLE }, title: priceTooltip(tier, remote.perMillion) },
+            peak ? 'Пик' : 'Не пик',
+          ),
           h('span', null, ' ', remaining),
           sep,
-          h('span', null, 'Баланс: '),
           h(
-            'a',
-            {
-              href: remote.topUpUrl,
-              title: 'Пополнить баланс (внутри приложения)',
-              style: BUTTON_STYLE,
-              onClick: (event) => {
-                // Обычный клик открывает встроенную панель; Ctrl/Cmd/Shift+клик
-                // оставляем ссылке — тогда сработает браузер.
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
-                event.preventDefault()
-                openTopUp()
+            'span',
+            { style: { display: 'inline-flex', alignItems: 'baseline', ...HINT_STYLE }, title: balanceTooltip(remote) },
+            h('span', null, 'Баланс: '),
+            h(
+              'a',
+              {
+                href: remote.topUpUrl,
+                'aria-label': 'Пополнить баланс (внутри приложения)',
+                style: BUTTON_STYLE,
+                onClick: (event) => {
+                  // Обычный клик открывает встроенную панель; Ctrl/Cmd/Shift+клик
+                  // оставляем ссылке — тогда сработает браузер.
+                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return
+                  event.preventDefault()
+                  openTopUp()
+                },
               },
-            },
-            balanceText,
+              balanceText,
+            ),
+            extras.length > 0 ? h('span', null, ` · ${extras.join(' · ')}`) : null,
           ),
-          extras.length > 0
-            ? h('span', { title: 'Другие кошельки и бонусные баллы' }, ` · ${extras.join(' · ')}`)
-            : null,
           sep,
-          h('span', null, 'Сессия: '),
           h(
-            'button',
-            {
-              ref: buttonRef,
-              type: 'button',
-              onClick: toggle,
-              title: `Траты за ${USAGE_DAYS} дней`,
-              style: BUTTON_STYLE,
-            },
-            `${tokenText(sessionTokens)} ток · ${dollars(cost)}`,
+            'span',
+            { style: { display: 'inline-flex', alignItems: 'baseline' } },
+            h('span', null, 'Сессия: '),
+            h(
+              'button',
+              {
+                ref: buttonRef,
+                type: 'button',
+                onClick: toggle,
+                'aria-label': `Траты за ${USAGE_DAYS} дней`,
+                style: BUTTON_STYLE,
+              },
+              hasSession ? `${tokenText(sessionTokens)} ток · ${dollars(cost)}` : '—',
+            ),
           ),
         ),
         open ? h(UsagePopover, { anchor, onClose: () => setOpen(false) }) : null,
@@ -891,6 +1087,8 @@ window.__ModuleLoader__.load({
 
     exports.apply = apply
     exports.inject = inject
+    // Локальные проверки (tools/smoke.mjs): оболочка эти поля не читает.
+    exports.__internals = { priceTooltip, balanceTooltip, weekday, dayText, chartBars, BalanceChip }
     return module.exports
   },
 })

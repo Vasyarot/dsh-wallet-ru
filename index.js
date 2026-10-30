@@ -129,7 +129,7 @@ async function resolveApiKey(ctx, envName) {
  */
 function accountClient() {
   return {
-    version: process.env.DSH_CLIENT_VERSION ?? '0.2.1-rc.3',
+    version: process.env.DSH_CLIENT_VERSION ?? '0.2.1-rc.5',
     locale: 'ru-RU',
     timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60,
   }
@@ -348,7 +348,15 @@ async function dailyUsage(ctx, days) {
     }
   }
 
-  return { ok: true, days: [...perDay.values()].sort((a, b) => (a.date < b.date ? -1 : 1)) }
+  // Неделя показывается целиком: дни без запросов остаются нулевыми
+  // столбцами, иначе график «прыгает» и в нём не видно пауз.
+  const today = new Date()
+  const window = []
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const key = localDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset).getTime())
+    window.push(perDay.get(key) ?? { date: key, requests: 0, tokens: 0, cost: 0 })
+  }
+  return { ok: true, days: window }
 }
 
 /**
