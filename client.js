@@ -36,6 +36,8 @@ window.__ModuleLoader__.load({
     const USAGE_DAYS = 7
     /** Ширина окна статистики. */
     const PANEL_WIDTH = 300
+    /** Высота окна статистики: столько нужно, чтобы открыться над чипом. */
+    const PANEL_HEIGHT = 210
 
     /** Цены DeepSeek в долларах за миллион токенов вне пика. */
     const OFFPEAK_USD = { input: 0.14, cacheHit: 0.014, output: 0.21 }
@@ -551,9 +553,13 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         if (anchor !== null && anchor !== undefined) {
           const rect = anchor.getBoundingClientRect()
+          // Над чипом окно выше композера: в «пустом» состоянии он стоит
+          // посередине экрана, а на низком окне места сверху не хватает.
+          const above = rect.top - 8 >= PANEL_HEIGHT
           setPosition({
             left: Math.max(8, Math.min(rect.left, window.innerWidth - PANEL_WIDTH - 12)),
-            bottom: window.innerHeight - rect.top + 8,
+            top: above ? null : rect.bottom + 8,
+            bottom: above ? window.innerHeight - rect.top + 8 : null,
           })
         }
       }, [anchor])
@@ -694,7 +700,9 @@ window.__ModuleLoader__.load({
           style: {
             position: 'fixed',
             left: `${position === null ? 8 : position.left}px`,
-            bottom: `${position === null ? 40 : position.bottom}px`,
+            top: position !== null && position.top !== null ? `${position.top}px` : undefined,
+            bottom:
+              position !== null && position.top !== null ? undefined : `${position === null ? 40 : position.bottom}px`,
             zIndex: 2147483000,
             width: `${PANEL_WIDTH}px`,
             boxSizing: 'border-box',
