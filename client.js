@@ -509,6 +509,17 @@ window.__ModuleLoader__.load({
     }
 
     /**
+     * Причина отказа недельной статистики по-русски.
+     * @param {string|null} reason - код или текст с хоста.
+     * @returns {string}
+     */
+    function usageReason(reason) {
+      if (!reason) return 'нет данных'
+      if (reason === 'no-session-persistence') return 'хост не отдаёт журналы сессий'
+      return reason
+    }
+
+    /**
      * Геометрия столбцов: высота пропорциональна стоимости дня, ноль — тонкая
      * полоска-заглушка, чтобы день не исчезал с оси.
      * @param {Array<{date: string, cost?: number}>} days - дни окна.
@@ -596,7 +607,7 @@ window.__ModuleLoader__.load({
         state.phase !== 'ready'
           ? state.phase === 'loading'
             ? 'Загрузка…'
-            : state.reason
+            : usageReason(state.reason)
           : active
             ? dayText(active)
             : `${tokenText(totalTokens)} токенов · ${totalRequests} запросов`
@@ -719,24 +730,25 @@ window.__ModuleLoader__.load({
           detail,
         ),
         bars,
-        state.phase === 'error' ? h('div', { style: { padding: '6px 0', opacity: 0.7 } }, 'Нет данных о тратах') : null,
-        h(
-          'div',
-          {
-            style: {
-              marginTop: '6px',
-              paddingTop: '6px',
-              borderTop: '1px solid var(--dsw-alias-separator-primary, GrayText)',
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: '8px',
-              color: 'var(--dsw-alias-label-tertiary, GrayText)',
-              fontSize: '11px',
-            },
-          },
-          h('span', null, `Итого ${dollars(total)}`),
-          h('span', { style: { marginLeft: 'auto' } }, tokenText(totalTokens)),
-        ),
+        state.phase === 'ready'
+          ? h(
+              'div',
+              {
+                style: {
+                  marginTop: '6px',
+                  paddingTop: '6px',
+                  borderTop: '1px solid var(--dsw-alias-separator-primary, GrayText)',
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: '8px',
+                  color: 'var(--dsw-alias-label-tertiary, GrayText)',
+                  fontSize: '11px',
+                },
+              },
+              h('span', null, `Итого ${dollars(total)}`),
+              h('span', { style: { marginLeft: 'auto' } }, tokenText(totalTokens)),
+            )
+          : null,
       )
     }
 
@@ -1107,7 +1119,7 @@ window.__ModuleLoader__.load({
     exports.apply = apply
     exports.inject = inject
     // Локальные проверки (tools/smoke.mjs): оболочка эти поля не читает.
-    exports.__internals = { priceTooltip, balanceTooltip, weekday, dayText, chartBars, weekWindow, BalanceChip }
+    exports.__internals = { priceTooltip, balanceTooltip, weekday, dayText, chartBars, weekWindow, usageReason, BalanceChip }
     return module.exports
   },
 })

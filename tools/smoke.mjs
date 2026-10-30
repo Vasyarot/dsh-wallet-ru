@@ -57,7 +57,7 @@ const client = captured.factory((name) => {
 assert.equal(typeof client.apply, 'function')
 assert.deepEqual(client.inject, ['slots'])
 
-const { priceTooltip, balanceTooltip, weekday, dayText, chartBars, weekWindow } = client.__internals
+const { priceTooltip, balanceTooltip, weekday, dayText, chartBars, weekWindow, usageReason } = client.__internals
 assert.equal(typeof priceTooltip, 'function')
 assert.equal(typeof balanceTooltip, 'function')
 
@@ -132,6 +132,9 @@ assert.equal(window.at(-4).date, key(3))
 assert.equal(window.at(-4).cost, 1.5)
 assert.equal(window.filter((day) => day.requests === 0).length, 5)
 assert.deepEqual(weekWindow([]).map((day) => day.requests), [0, 0, 0, 0, 0, 0, 0])
+assert.equal(usageReason('no-session-persistence'), 'хост не отдаёт журналы сессий')
+assert.equal(usageReason(null), 'нет данных')
+assert.equal(usageReason('boom'), 'boom')
 
 // --- Разметка чипа: у сеанса нет title, у тарифа и баланса — есть.
 if (found !== null) {
