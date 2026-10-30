@@ -107,8 +107,8 @@ const days = [
 ]
 const bars = chartBars(days)
 assert.equal(bars.length, 7)
-assert.equal(bars[1].height, Math.round(10 + 0.5 * 72))
-assert.equal(bars[5].height, 82)
+assert.equal(bars[1].height, Math.round(8 + 0.5 * 72))
+assert.equal(bars[5].height, 80)
 assert.equal(bars[0].height, 3)
 assert.equal(bars[3].height, 3)
 assert.equal(weekday('2026-10-29'), 'чт')

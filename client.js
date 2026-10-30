@@ -503,7 +503,7 @@ window.__ModuleLoader__.load({
         return {
           date: day.date,
           weekday: weekday(day.date),
-          height: cost > 0 ? Math.round(10 + ratio * 72) : 3,
+          height: cost > 0 ? Math.round(8 + ratio * 72) : 3,
         }
       })
     }
@@ -595,7 +595,7 @@ window.__ModuleLoader__.load({
                   display: 'flex',
                   alignItems: 'flex-end',
                   gap: '6px',
-                  height: '86px',
+                  height: '100px',
                   marginTop: '2px',
                 },
               },
@@ -620,7 +620,7 @@ window.__ModuleLoader__.load({
                   },
                   h(
                     'div',
-                    { style: { height: '74px', display: 'flex', alignItems: 'flex-end' } },
+                    { style: { height: '84px', display: 'flex', alignItems: 'flex-end' } },
                     h('div', {
                       style: {
                         width: '100%',
